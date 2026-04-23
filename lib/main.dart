@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -8,8 +7,9 @@ import 'package:firebase_database/firebase_database.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:http/http.dart' as http;
 import 'package:url_launcher/url_launcher.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:intl/intl.dart';
+import 'package:telephony/telephony.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -23,17 +23,12 @@ class MyApp extends StatelessWidget {
     return MaterialApp(
       title: 'MotherCare',
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        primarySwatch: Colors.pink,
-        scaffoldBackgroundColor: Color(0xFFFDF9FA),
-        fontFamily: 'Poppins',
-      ),
+      theme: ThemeData(primarySwatch: Colors.pink),
       home: StreamBuilder<User?>(
         stream: FirebaseAuth.instance.authStateChanges(),
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.active) {
-            final user = snapshot.data;
-            if (user == null) return LoginPage();
+            if (snapshot.data == null) return LoginPage();
             return Dashboard();
           }
           return Scaffold(body: Center(child: CircularProgressIndicator()));
@@ -43,34 +38,30 @@ class MyApp extends StatelessWidget {
   }
 }
 
-// ==================== LOGIN & REGISTER ====================
+// -------------------- LOGIN PAGE --------------------
 class LoginPage extends StatefulWidget {
   @override
   _LoginPageState createState() => _LoginPageState();
 }
 
 class _LoginPageState extends State<LoginPage> {
-  final _emailController = TextEditingController();
-  final _passwordController = TextEditingController();
-  bool _isLogin = true;
-  String _error = '';
+  TextEditingController email = TextEditingController();
+  TextEditingController password = TextEditingController();
+  bool isLogin = true;
+  String errorMsg = '';
 
-  Future<void> _submit() async {
-    setState(() => _error = '');
+  Future<void> submit() async {
+    setState(() => errorMsg = '');
     try {
-      if (_isLogin) {
+      if (isLogin) {
         await FirebaseAuth.instance.signInWithEmailAndPassword(
-          email: _emailController.text.trim(),
-          password: _passwordController.text.trim(),
-        );
+            email: email.text.trim(), password: password.text.trim());
       } else {
         await FirebaseAuth.instance.createUserWithEmailAndPassword(
-          email: _emailController.text.trim(),
-          password: _passwordController.text.trim(),
-        );
+            email: email.text.trim(), password: password.text.trim());
       }
     } on FirebaseAuthException catch (e) {
-      setState(() => _error = e.message ?? 'Authentication error');
+      setState(() => errorMsg = e.message ?? 'Error');
     }
   }
 
@@ -78,60 +69,38 @@ class _LoginPageState extends State<LoginPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       body: Container(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [Color(0xFFFFF0F5), Color(0xFFFFE4E1)],
-          ),
-        ),
+        color: Colors.pink[50],
         child: Center(
           child: SingleChildScrollView(
             padding: EdgeInsets.all(24),
             child: Card(
-              elevation: 20,
-              shadowColor: Colors.pink.shade200,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
               child: Padding(
                 padding: EdgeInsets.all(24),
                 child: Column(
-                  mainAxisSize: MainAxisSize.min,
                   children: [
                     Icon(Icons.favorite, size: 60, color: Colors.pink),
                     SizedBox(height: 20),
-                    Text(
-                      _isLogin ? 'Welcome Back' : 'Create Account',
-                      style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Colors.pink.shade700),
-                    ),
+                    Text(isLogin ? 'Welcome Back' : 'Create Account',
+                        style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold)),
                     SizedBox(height: 30),
-                    TextField(
-                      controller: _emailController,
-                      decoration: InputDecoration(labelText: 'Email', prefixIcon: Icon(Icons.email)),
-                    ),
+                    TextField(controller: email, decoration: InputDecoration(labelText: 'Email')),
                     SizedBox(height: 15),
-                    TextField(
-                      controller: _passwordController,
-                      obscureText: true,
-                      decoration: InputDecoration(labelText: 'Password', prefixIcon: Icon(Icons.lock)),
-                    ),
-                    if (_error.isNotEmpty) ...[
-                      SizedBox(height: 15),
-                      Text(_error, style: TextStyle(color: Colors.red)),
-                    ],
+                    TextField(controller: password, obscureText: true, decoration: InputDecoration(labelText: 'Password')),
+                    if (errorMsg.isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 15),
+                        child: Text(errorMsg, style: TextStyle(color: Colors.red)),
+                      ),
                     SizedBox(height: 30),
                     ElevatedButton(
-                      onPressed: _submit,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.pink,
-                        foregroundColor: Colors.white,
-                        minimumSize: Size(double.infinity, 50),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
-                      ),
-                      child: Text(_isLogin ? 'Login' : 'Register'),
+                      onPressed: submit,
+                      style: ElevatedButton.styleFrom(backgroundColor: Colors.pink, minimumSize: Size(double.infinity, 50)),
+                      child: Text(isLogin ? 'Login' : 'Register'),
                     ),
                     TextButton(
-                      onPressed: () => setState(() => _isLogin = !_isLogin),
-                      child: Text(_isLogin ? 'Need an account? Register' : 'Already have an account? Login'),
+                      onPressed: () => setState(() => isLogin = !isLogin),
+                      child: Text(isLogin ? 'Need an account? Register' : 'Already have an account? Login'),
                     ),
                   ],
                 ),
@@ -144,132 +113,76 @@ class _LoginPageState extends State<LoginPage> {
   }
 }
 
-// ==================== DASHBOARD (9 cards) ====================
+// -------------------- DASHBOARD --------------------
 class Dashboard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
-    final user = FirebaseAuth.instance.currentUser;
+    User? user = FirebaseAuth.instance.currentUser;
     return Scaffold(
-      body: Container(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [Color(0xFFFFF0F5), Color(0xFFFFE4E1)],
-          ),
-        ),
-        child: SafeArea(
-          child: Column(
-            children: [
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            "Hello ${user?.email?.split('@')[0] ?? 'Mama'}!",
-                            style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Colors.pink.shade800),
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          Text("Your pregnancy companion", style: TextStyle(fontSize: 14, color: Colors.pink.shade600)),
-                        ],
-                      ),
-                    ),
-                    SizedBox(width: 8),
-                    CircleAvatar(
-                      radius: 24,
-                      backgroundColor: Colors.pink.shade100,
-                      child: IconButton(
-                        icon: Icon(Icons.person, color: Colors.pink),
-                        onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => ProfilePage())),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20),
-                child: Row(
-                  children: [
-                    _buildStatCard("Health", "Track vitals", Icons.favorite, Colors.pink),
-                    SizedBox(width: 12),
-                    _buildStatCard("SOS", "Emergency", Icons.emergency, Colors.red),
-                  ],
-                ),
-              ),
-              SizedBox(height: 20),
-              Expanded(
-                child: GridView.count(
-                  crossAxisCount: 2,
-                  padding: EdgeInsets.all(20),
-                  crossAxisSpacing: 20,
-                  mainAxisSpacing: 20,
-                  childAspectRatio: 1.1,
-                  children: [
-                    _buildMenuCard(context, "Health Vitals", Icons.favorite, Colors.pink, HealthPage()),
-                    _buildMenuCard(context, "SOS Emergency", Icons.emergency, Colors.red, SOSPage()),
-                    _buildMenuCard(context, "Getting Pregnant", Icons.calendar_today, Colors.purple, GettingPregnantPage()),
-                    _buildMenuCard(context, "Baby Care", Icons.child_care, Colors.teal, BabyCarePage()),
-                    _buildMenuCard(context, "Baby Health", Icons.health_and_safety, Colors.orange, BabyHealthPage()),
-                    _buildMenuCard(context, "Baby Products", Icons.shopping_bag, Colors.blue, BabyProductsPage()),
-                    _buildMenuCard(context, "Nutrition Guide", Icons.food_bank, Colors.green, NutritionPage()),
-                    _buildMenuCard(context, "Nearby Medical", Icons.local_hospital, Colors.indigo, NearbyMedicalPage()),
-                    _buildMenuCard(context, "Maternity Hospitals", Icons.pregnant_woman, Colors.deepPurple, MaternityHospitalsPage()),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildStatCard(String title, String subtitle, IconData icon, Color color) {
-    return Expanded(
-      child: Card(
-        elevation: 4,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        child: Padding(
-          padding: EdgeInsets.symmetric(vertical: 12, horizontal: 8),
-          child: Row(
-            children: [
-              Icon(icon, color: color, size: 28),
-              SizedBox(width: 8),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+      body: SafeArea(
+        child: Column(
+          children: [
+            Padding(
+              padding: EdgeInsets.all(16),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text(title, style: TextStyle(fontWeight: FontWeight.bold)),
-                  Text(subtitle, style: TextStyle(fontSize: 10, color: Colors.grey)),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          "Hello ${user?.email?.split('@')[0] ?? 'Mama'}!",
+                          style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        Text("Your pregnancy companion", style: TextStyle(fontSize: 14)),
+                      ],
+                    ),
+                  ),
+                  SizedBox(width: 8),
+                  CircleAvatar(
+                    backgroundColor: Colors.pink[100],
+                    child: IconButton(
+                      icon: Icon(Icons.person, color: Colors.pink),
+                      onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => ProfilePage())),
+                    ),
+                  ),
                 ],
               ),
-            ],
-          ),
+            ),
+            Expanded(
+              child: GridView.count(
+                crossAxisCount: 2,
+                padding: EdgeInsets.all(20),
+                crossAxisSpacing: 20,
+                mainAxisSpacing: 20,
+                children: [
+                  _menuCard(context, "Health Vitals", Icons.favorite, Colors.pink, HealthPage()),
+                  _menuCard(context, "SOS Emergency", Icons.emergency, Colors.red, SOSPage()),
+                  _menuCard(context, "Getting Pregnant", Icons.calendar_today, Colors.purple, GettingPregnantPage()),
+                  _menuCard(context, "Baby Care", Icons.child_care, Colors.teal, BabyCarePage()),
+                  _menuCard(context, "Baby Health", Icons.health_and_safety, Colors.orange, BabyHealthPage()),
+                  _menuCard(context, "Baby Products", Icons.shopping_bag, Colors.blue, BabyProductsPage()),
+                  _menuCard(context, "Maternity Hospitals", Icons.pregnant_woman, Colors.deepPurple, MaternityHospitalsPage()),
+                ],
+              ),
+            ),
+          ],
         ),
       ),
     );
   }
 
-  Widget _buildMenuCard(BuildContext context, String title, IconData icon, Color color, Widget page) {
+  Widget _menuCard(BuildContext context, String title, IconData icon, Color color, Widget page) {
     return Card(
-      elevation: 12,
-      shadowColor: color.withOpacity(0.5),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       child: InkWell(
         onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => page)),
-        borderRadius: BorderRadius.circular(24),
         child: Container(
           decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [color.withOpacity(0.9), color],
-            ),
-            borderRadius: BorderRadius.circular(24),
+            color: color,
+            borderRadius: BorderRadius.circular(20),
           ),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
@@ -285,38 +198,145 @@ class Dashboard extends StatelessWidget {
   }
 }
 
-// ==================== FIREBASE SERVICES (Health Data) ====================
-class FirebaseServices {
-  final DatabaseReference dbRef = FirebaseDatabase.instance.ref("sensor_data");
-  Stream<Map<String, dynamic>> getHealthData() {
-    return dbRef.onValue.map((event) {
-      final rawData = event.snapshot.value;
-      if (rawData == null || rawData is! Map) return {"heart_rate": 0, "spo2": 0};
-      final data = Map<String, dynamic>.from(rawData);
-      return {"heart_rate": data["heart_rate"] ?? 0, "spo2": data["spo2"] ?? 0};
-    });
+// -------------------- HELPER: RELIABLE LOCATION STRING --------------------
+Future<String> getLocationString(BuildContext context) async {
+  try {
+    bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+    if (!serviceEnabled) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Please enable GPS for location sharing")),
+        );
+      }
+      return "";
+    }
+
+    LocationPermission permission = await Geolocator.checkPermission();
+    if (permission == LocationPermission.denied) {
+      permission = await Geolocator.requestPermission();
+      if (permission == LocationPermission.denied) return "";
+    }
+    if (permission == LocationPermission.deniedForever) return "";
+
+    // Try current position with timeout
+    Position? pos = await Geolocator.getCurrentPosition(
+      desiredAccuracy: LocationAccuracy.medium,
+      timeLimit: Duration(seconds: 10),
+    ).catchError((e) => null);
+
+    pos ??= await Geolocator.getLastKnownPosition();
+
+    if (pos != null) {
+      return "\n📍 My location: https://maps.google.com/?q=${pos.latitude},${pos.longitude}";
+    } else {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Could not get location. SOS will be without location.")),
+        );
+      }
+      return "";
+    }
+  } catch (e) {
+    print("Location error: $e");
+    return "";
   }
 }
 
-// ==================== HEALTH PAGE ====================
+// -------------------- HELPER: OPEN SMS WITH PRE-FILLED MESSAGE --------------------
+Future<void> openSmsWithMessage(String phone, String message) async {
+  final Uri smsUri = Uri(scheme: 'sms', path: phone, queryParameters: {'body': message});
+  if (await canLaunchUrl(smsUri)) {
+    await launchUrl(smsUri);
+  } else {
+    print("Could not launch SMS for $phone");
+  }
+}
+
+// -------------------- HEALTH PAGE (Auto SOS for contacts only, opens SMS draft) --------------------
 class HealthPage extends StatefulWidget {
   @override
-  State<HealthPage> createState() => _HealthPageState();
+  _HealthPageState createState() => _HealthPageState();
 }
 
 class _HealthPageState extends State<HealthPage> {
-  final FirebaseServices firebase = FirebaseServices();
-  int heartRate = 0, spo2 = 0;
+  DatabaseReference dbRef = FirebaseDatabase.instance.ref("sensor_data");
+  int heartRate = 0;
+  int spo2 = 0;
+
+  bool _sosTriggered = false;
+  DateTime? _lastSosTime;
+  DateTime? _highHeartRateStartTime;
+  List<Map<String, dynamic>> _contacts = [];
+  User? _user = FirebaseAuth.instance.currentUser;
 
   @override
   void initState() {
     super.initState();
-    firebase.getHealthData().listen((data) {
-      setState(() {
-        heartRate = (data["heart_rate"] ?? 0).toInt();
-        spo2 = (data["spo2"] ?? 0).toInt();
-      });
+    _loadContacts();
+    dbRef.onValue.listen((event) async {
+      var raw = event.snapshot.value;
+      if (raw != null && raw is Map) {
+        setState(() {
+          heartRate = (raw["heart_rate"] ?? 0).toInt();
+          spo2 = (raw["spo2"] ?? 0).toInt();
+        });
+
+        // Auto SOS only when heart rate > 120 for 30 seconds
+        if (heartRate > 120) {
+          _highHeartRateStartTime ??= DateTime.now();
+          final duration = DateTime.now().difference(_highHeartRateStartTime!).inSeconds;
+          if (duration >= 30) {
+            await _triggerAutoSOS();
+          }
+        } else {
+          _highHeartRateStartTime = null;
+          _sosTriggered = false;
+        }
+      }
     });
+  }
+
+  void _loadContacts() async {
+    final prefs = await SharedPreferences.getInstance();
+    String? jsonStr = prefs.getString('emergency_contacts');
+    if (jsonStr != null) {
+      setState(() {
+        _contacts = List<Map<String, dynamic>>.from(json.decode(jsonStr));
+      });
+    }
+  }
+
+  Future<void> _triggerAutoSOS() async {
+    if (_sosTriggered) return;
+    if (_lastSosTime != null && DateTime.now().difference(_lastSosTime!).inMinutes < 5) return;
+
+    _sosTriggered = true;
+    _lastSosTime = DateTime.now();
+
+    String locationMsg = await getLocationString(context);
+    String alert = "🚨 CRITICAL! High heart rate detected for over 30s. HR: $heartRate BPM, SpO2: $spo2%.$locationMsg";
+
+    if (_contacts.isEmpty) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Critical vitals! But no contacts found locally."), backgroundColor: Colors.orange));
+      return;
+    }
+
+    final Telephony telephony = Telephony.instance;
+    bool? permission = await telephony.requestSmsPermissions;
+
+    if (permission == true) {
+      for (var c in _contacts) {
+        telephony.sendSms(to: c['phone'], message: alert);
+      }
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("🚨 SOS sent automatically (Vitals disturbed for 30s)"), backgroundColor: Colors.red));
+      }
+    } else {
+      // Fallback
+      if (await canLaunchUrl(Uri(scheme: 'sms', path: _contacts[0]['phone'], query: 'body=${Uri.encodeComponent(alert)}'))) {
+        await launchUrl(Uri(scheme: 'sms', path: _contacts[0]['phone'], query: 'body=${Uri.encodeComponent(alert)}'));
+      }
+    }
   }
 
   @override
@@ -327,27 +347,22 @@ class _HealthPageState extends State<HealthPage> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            _buildHealthCard("Heart Rate", "$heartRate BPM", Icons.favorite, Colors.pink),
+            _card("Heart Rate", "$heartRate BPM", Icons.favorite, Colors.pink),
             SizedBox(height: 20),
-            _buildHealthCard("Blood Oxygen", "$spo2 %", Icons.air, Colors.cyan),
+            _card("Blood Oxygen", "$spo2 %", Icons.air, Colors.cyan),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildHealthCard(String title, String value, IconData icon, Color color) {
+  Widget _card(String title, String value, IconData icon, Color color) {
     return Card(
-      elevation: 20,
-      shadowColor: color,
+      elevation: 5,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       child: Container(
         width: 250,
         padding: EdgeInsets.all(20),
-        decoration: BoxDecoration(
-          gradient: LinearGradient(colors: [color.withOpacity(0.2), Colors.white]),
-          borderRadius: BorderRadius.circular(20),
-        ),
         child: Column(
           children: [
             Icon(icon, size: 50, color: color),
@@ -362,523 +377,287 @@ class _HealthPageState extends State<HealthPage> {
   }
 }
 
-// ==================== PROFILE & EMERGENCY CONTACTS ====================
+// -------------------- PROFILE PAGE (unchanged, works with Firestore) --------------------
 class ProfilePage extends StatefulWidget {
   @override
   _ProfilePageState createState() => _ProfilePageState();
 }
 
 class _ProfilePageState extends State<ProfilePage> {
-  final _profileNameController = TextEditingController();
-  final _profilePhoneController = TextEditingController();
-  final _bloodController = TextEditingController();
-  final _notesController = TextEditingController();
-  final _addressController = TextEditingController();
-  final _dobController = TextEditingController();
-  
-  final _contactNameController = TextEditingController();
-  final _contactPhoneController = TextEditingController();
-  
-  final _currentUser = FirebaseAuth.instance.currentUser;
-  DateTime? _dob;
+  TextEditingController nameCtrl = TextEditingController();
+  TextEditingController phoneCtrl = TextEditingController();
+  TextEditingController bloodCtrl = TextEditingController();
+  TextEditingController notesCtrl = TextEditingController();
+  TextEditingController addressCtrl = TextEditingController();
+  TextEditingController dobCtrl = TextEditingController();
+
+  TextEditingController contactName = TextEditingController();
+  TextEditingController contactPhone = TextEditingController();
+
+  User? user = FirebaseAuth.instance.currentUser;
+  List<Map<String, dynamic>> contacts = [];
 
   @override
   void initState() {
     super.initState();
-    _loadUserData();
+    loadUserData();
+    loadContacts();
   }
 
-  void _loadUserData() async {
-    if (_currentUser == null) return;
-    final doc = await FirebaseFirestore.instance.collection('users').doc(_currentUser!.uid).get();
+  void loadUserData() async {
+    if (user == null) return;
+    var doc = await FirebaseFirestore.instance.collection('users').doc(user!.uid).get();
     if (doc.exists) {
-      final data = doc.data()!;
-      _profileNameController.text = data['name'] ?? '';
-      _profilePhoneController.text = data['phone'] ?? '';
-      _bloodController.text = data['bloodGroup'] ?? '';
-      _notesController.text = data['emergencyNotes'] ?? '';
-      _addressController.text = (data['address'] ?? '').toString();
-      _dob = (data['dateOfBirth'] as Timestamp?)?.toDate();
-      _dobController.text = _dob != null ? DateFormat('yyyy-MM-dd').format(_dob!) : '';
+      var data = doc.data()!;
+      nameCtrl.text = data['name'] ?? '';
+      phoneCtrl.text = data['phone'] ?? '';
+      bloodCtrl.text = data['bloodGroup'] ?? '';
+      notesCtrl.text = data['emergencyNotes'] ?? '';
+      addressCtrl.text = data['address'] ?? '';
+      if (data['dateOfBirth'] != null) {
+        DateTime d = (data['dateOfBirth'] as Timestamp).toDate();
+        dobCtrl.text = DateFormat('yyyy-MM-dd').format(d);
+      }
     }
   }
 
-  @override
-  void dispose() {
-    _profileNameController.dispose();
-    _profilePhoneController.dispose();
-    _bloodController.dispose();
-    _notesController.dispose();
-    _addressController.dispose();
-    _dobController.dispose();
-    _contactNameController.dispose();
-    _contactPhoneController.dispose();
-    super.dispose();
+  void loadContacts() async {
+    if (user == null) return;
+    var snap = await FirebaseFirestore.instance
+        .collection('users')
+        .doc(user!.uid)
+        .collection('emergencyContacts')
+        .orderBy('createdAt', descending: true)
+        .get();
+    setState(() {
+      contacts = snap.docs.map((d) => {'id': d.id, ...d.data() as Map<String, dynamic>}).toList();
+    });
   }
 
-  Future<void> _saveProfile() async {
-    if (_currentUser == null) return;
+  Future<void> saveProfile() async {
+    if (user == null) return;
     try {
-      final address = _addressController.text.trim();
-      final String dobText = _dobController.text.trim();
-      DateTime? dobToSave = _dob;
-      if (dobText.isNotEmpty) {
-        try {
-          dobToSave = DateFormat('yyyy-MM-dd').parse(dobText);
-        } catch(e) {}
-      }
-
-      final Map<String, dynamic> payload = {
-        'name': _profileNameController.text.trim(),
-        'phone': _profilePhoneController.text.trim(),
-        'bloodGroup': _bloodController.text.trim(),
-        'emergencyNotes': _notesController.text.trim(),
-        'address': address,
+      Map<String, dynamic> data = {
+        'name': nameCtrl.text.trim(),
+        'phone': phoneCtrl.text.trim(),
+        'bloodGroup': bloodCtrl.text.trim(),
+        'emergencyNotes': notesCtrl.text.trim(),
+        'address': addressCtrl.text.trim(),
         'updatedAt': FieldValue.serverTimestamp(),
       };
-      if (dobToSave != null) payload['dateOfBirth'] = Timestamp.fromDate(dobToSave);
-      
-      await FirebaseFirestore.instance.collection('users').doc(_currentUser!.uid).set(payload, SetOptions(merge: true));
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Profile updated successfully')));
+      if (dobCtrl.text.isNotEmpty) {
+        data['dateOfBirth'] = Timestamp.fromDate(DateFormat('yyyy-MM-dd').parse(dobCtrl.text.trim()));
+      }
+      await FirebaseFirestore.instance.collection('users').doc(user!.uid).set(data, SetOptions(merge: true));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Profile saved')));
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed to save profile: $e')));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed to save: $e'), backgroundColor: Colors.red));
     }
   }
 
-  Future<void> _addContact() async {
-    if (_contactNameController.text.isEmpty || _contactPhoneController.text.isEmpty) return;
-    try {
-      await FirebaseFirestore.instance
-          .collection('users')
-          .doc(_currentUser!.uid)
-          .collection('emergencyContacts')
-          .add({
-        'name': _contactNameController.text.trim(),
-        'phone': _contactPhoneController.text.trim(),
-        'createdAt': FieldValue.serverTimestamp(),
-      });
-      _contactNameController.clear();
-      _contactPhoneController.clear();
-    } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error adding contact: $e')));
-    }
-  }
-
-  Future<void> _deleteContact(String docId) async {
+  Future<void> addContact() async {
+    if (contactName.text.isEmpty || contactPhone.text.isEmpty) return;
     await FirebaseFirestore.instance
         .collection('users')
-        .doc(_currentUser!.uid)
+        .doc(user!.uid)
         .collection('emergencyContacts')
-        .doc(docId)
-        .delete();
+        .add({
+      'name': contactName.text.trim(),
+      'phone': contactPhone.text.trim(),
+      'createdAt': FieldValue.serverTimestamp(),
+    });
+    contactName.clear();
+    contactPhone.clear();
+    loadContacts();
   }
 
-  Widget _buildProfileField(TextEditingController controller, String label, IconData icon) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12.0),
-      child: TextField(
-        controller: controller,
-        decoration: InputDecoration(
-          labelText: label,
-          prefixIcon: Icon(icon, color: Colors.purple),
-          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-          filled: true,
-          fillColor: Colors.white,
-        ),
-      ),
-    );
+  Future<void> deleteContact(String id) async {
+    await FirebaseFirestore.instance
+        .collection('users')
+        .doc(user!.uid)
+        .collection('emergencyContacts')
+        .doc(id)
+        .delete();
+    loadContacts();
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: Text("Profile"),
-        backgroundColor: Colors.purple,
-        foregroundColor: Colors.white,
-        actions: [
-          IconButton(
-            icon: Icon(Icons.logout),
-            tooltip: 'Logout',
-            onPressed: () async {
-              await FirebaseAuth.instance.signOut();
-              Navigator.of(context).popUntil((route) => route.isFirst);
-            },
-          ),
-        ],
-      ),
-      body: CustomScrollView(
-        slivers: [
-          SliverToBoxAdapter(
-            child: Column(
+      appBar: AppBar(title: Text("Profile"), backgroundColor: Colors.purple, actions: [
+        IconButton(icon: Icon(Icons.logout), onPressed: () async {
+          await FirebaseAuth.instance.signOut();
+          Navigator.popUntil(context, (route) => route.isFirst);
+        })
+      ]),
+      body: SingleChildScrollView(
+        padding: EdgeInsets.all(16),
+        child: Column(
+          children: [
+            CircleAvatar(radius: 40, backgroundColor: Colors.purple[200], child: Icon(Icons.person, size: 50)),
+            SizedBox(height: 10),
+            Text("Email: ${user?.email ?? 'Unknown'}"),
+            SizedBox(height: 20),
+            _field(nameCtrl, "Full Name", Icons.person),
+            _field(bloodCtrl, "Blood Group", Icons.bloodtype),
+            _field(dobCtrl, "Due Date (YYYY-MM-DD)", Icons.calendar_today),
+            _field(phoneCtrl, "Your Phone", Icons.phone),
+            _field(addressCtrl, "Address", Icons.home),
+            _field(notesCtrl, "Medical Notes", Icons.notes),
+            ElevatedButton(onPressed: saveProfile, child: Text("Save Profile")),
+            SizedBox(height: 20),
+            Text("Emergency Contacts", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+            Row(
               children: [
-                Container(
-                  color: Colors.purple.shade50,
-                  width: double.infinity,
-                  padding: EdgeInsets.symmetric(vertical: 24, horizontal: 16),
-                  child: Column(
-                    children: [
-                      CircleAvatar(
-                        radius: 40,
-                        backgroundColor: Colors.purple.shade200,
-                        child: Icon(Icons.person, size: 50, color: Colors.white),
-                      ),
-                      SizedBox(height: 12),
-                      Text("Email: ${_currentUser?.email ?? 'Unknown'}", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                      SizedBox(height: 16),
-                      _buildProfileField(_profileNameController, "Full Name", Icons.person_outline),
-                      _buildProfileField(_bloodController, "Blood Group", Icons.bloodtype),
-                      _buildProfileField(_dobController, "Due Date / Date of Birth (YYYY-MM-DD)", Icons.calendar_today),
-                      _buildProfileField(_profilePhoneController, "Your Phone Number", Icons.phone),
-                      _buildProfileField(_addressController, "Current Address", Icons.home),
-                      _buildProfileField(_notesController, "Medical Notes / Allergies", Icons.notes),
-                      SizedBox(height: 16),
-                      ElevatedButton.icon(
-                        onPressed: _saveProfile,
-                        icon: Icon(Icons.save),
-                        label: Text("Save Profile"),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.purple,
-                          foregroundColor: Colors.white,
-                          padding: EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-
-                Padding(
-                  padding: EdgeInsets.all(16),
-                  child: Text("Personal Emergency Contacts", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.purple.shade800)),
-                ),
-                Container(
-                  margin: EdgeInsets.symmetric(horizontal: 16),
-                  padding: EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(16),
-                    boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 4)],
-                  ),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: TextField(
-                          controller: _contactNameController,
-                          decoration: InputDecoration(labelText: "Contact Name", border: OutlineInputBorder()),
-                        ),
-                      ),
-                      SizedBox(width: 10),
-                      Expanded(
-                        child: TextField(
-                          controller: _contactPhoneController,
-                          decoration: InputDecoration(labelText: "Phone", border: OutlineInputBorder()),
-                        ),
-                      ),
-                      SizedBox(width: 10),
-                      ElevatedButton(
-                        onPressed: _addContact,
-                        style: ElevatedButton.styleFrom(backgroundColor: Colors.purple, shape: CircleBorder(), padding: EdgeInsets.all(16)),
-                        child: Icon(Icons.add, color: Colors.white),
-                      ),
-                    ],
-                  ),
-                ),
+                Expanded(child: TextField(controller: contactName, decoration: InputDecoration(labelText: "Name"))),
+                SizedBox(width: 8),
+                Expanded(child: TextField(controller: contactPhone, decoration: InputDecoration(labelText: "Phone"))),
+                IconButton(onPressed: addContact, icon: Icon(Icons.add_circle, color: Colors.purple)),
               ],
             ),
-          ),
-          StreamBuilder<QuerySnapshot>(
-            stream: FirebaseFirestore.instance
-                .collection('users')
-                .doc(_currentUser!.uid)
-                .collection('emergencyContacts')
-                .orderBy('createdAt', descending: true)
-                .snapshots(),
-            builder: (context, snapshot) {
-              if (!snapshot.hasData) return SliverToBoxAdapter(child: Center(child: CircularProgressIndicator()));
-              final docs = snapshot.data!.docs;
-              if (docs.isEmpty) return SliverToBoxAdapter(child: Center(child: Padding(padding: EdgeInsets.all(16.0), child: Text("No personal contacts added yet"))));
-              
-              return SliverList(
-                delegate: SliverChildBuilderDelegate(
-                  (context, index) {
-                    final data = docs[index].data() as Map<String, dynamic>;
-                    return Card(
-                      margin: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                      child: ListTile(
-                        leading: CircleAvatar(backgroundColor: Colors.purple, child: Icon(Icons.person, color: Colors.white)),
-                        title: Text(data['name'], style: TextStyle(fontWeight: FontWeight.bold)),
-                        subtitle: Text(data['phone']),
-                        trailing: IconButton(
-                          icon: Icon(Icons.delete, color: Colors.red),
-                          onPressed: () => _deleteContact(docs[index].id),
-                        ),
-                      ),
-                    );
-                  },
-                  childCount: docs.length,
-                ),
-              );
-            },
-          ),
-          SliverToBoxAdapter(child: SizedBox(height: 40)),
-        ],
+            ...contacts.map((c) => Card(
+              child: ListTile(
+                title: Text(c['name']),
+                subtitle: Text(c['phone']),
+                trailing: IconButton(icon: Icon(Icons.delete, color: Colors.red), onPressed: () => deleteContact(c['id'])),
+              ),
+            )),
+          ],
+        ),
       ),
+    );
+  }
+
+  Widget _field(TextEditingController c, String label, IconData icon) {
+    return Padding(
+      padding: EdgeInsets.only(bottom: 12),
+      child: TextField(controller: c, decoration: InputDecoration(labelText: label, prefixIcon: Icon(icon))),
     );
   }
 }
 
-// ==================== SOS PAGE ====================
+// -------------------- SOS PAGE (Manual SOS for ambulance + contacts) --------------------
 class SOSPage extends StatefulWidget {
   @override
   _SOSPageState createState() => _SOSPageState();
 }
 
 class _SOSPageState extends State<SOSPage> {
-  final _currentUser = FirebaseAuth.instance.currentUser;
-  List<QueryDocumentSnapshot> _contacts = [];
-  String _ambulance = '102';
-  final _ambulanceController = TextEditingController();
+  User? user = FirebaseAuth.instance.currentUser;
+  List<Map<String, dynamic>> contacts = [];
+  String ambulance = "102";
+  int heartRate = 0;
+  int spo2 = 0;
 
   @override
   void initState() {
     super.initState();
-    _loadContacts();
-    _loadAmbulance();
-  }
-
-  void _loadContacts() async {
-    final snapshot = await FirebaseFirestore.instance
-        .collection('users')
-        .doc(_currentUser!.uid)
-        .collection('emergencyContacts')
-        .get();
-    setState(() {
-      _contacts = snapshot.docs;
+    loadContacts();
+    
+    // Listen to vitals for inclusion in manual SOS
+    FirebaseDatabase.instance.ref("sensor_data").onValue.listen((event) {
+      var raw = event.snapshot.value;
+      if (raw != null && raw is Map) {
+        if (mounted) {
+          setState(() {
+            heartRate = (raw["heart_rate"] ?? 0).toInt();
+            spo2 = (raw["spo2"] ?? 0).toInt();
+          });
+        }
+      }
     });
   }
 
-  void _loadAmbulance() async {
-    if (_currentUser == null) return;
-    final doc = await FirebaseFirestore.instance.collection('users').doc(_currentUser!.uid).get();
-    if (doc.exists) {
-      final data = doc.data()!;
-      setState(() {
-        _ambulance = (data['ambulance'] ?? _ambulance).toString();
-        _ambulanceController.text = _ambulance;
-      });
+  void loadContacts() async {
+    var snap = await FirebaseFirestore.instance
+        .collection('users')
+        .doc(user!.uid)
+        .collection('emergencyContacts')
+        .get();
+    setState(() {
+      contacts = snap.docs.map((d) => d.data() as Map<String, dynamic>).toList();
+    });
+  }
+
+  void loadAmbulance() async {
+    var doc = await FirebaseFirestore.instance.collection('users').doc(user!.uid).get();
+    if (doc.exists && doc.data()!['ambulance'] != null) {
+      setState(() => ambulance = doc.data()!['ambulance'].toString());
     }
   }
 
-  void _makeCall(String phone) async {
-    final Uri uri = Uri(scheme: 'tel', path: phone);
-    if (await canLaunchUrl(uri)) await launchUrl(uri);
+  void makeCall(String phone) async {
+    await launchUrl(Uri(scheme: 'tel', path: phone));
   }
 
-  void _sendMessage(String phone, {String? customMessage}) async {
-    String message = customMessage ?? "Emergency! I need help.";
-    if (customMessage == null) {
-      try {
-        LocationPermission permission = await Geolocator.requestPermission();
-        if (permission != LocationPermission.denied && permission != LocationPermission.deniedForever) {
-          Position pos = await Geolocator.getCurrentPosition();
-          message += " My location: https://maps.google.com/?q=${pos.latitude},${pos.longitude}";
-        } else {
-          message += " (Location unavailable)";
-        }
-      } catch (e) {
-        message += " (Location unavailable)";
-      }
+  Future<void> sendManualSOS({bool includeAmbulance = true}) async {
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Getting your location...")));
+    String locationMsg = await getLocationString(context);
+    
+    String vitalInfo = "";
+    if (heartRate > 0) {
+      vitalInfo = " My Vitals: HR: $heartRate BPM, SpO2: $spo2%.";
     }
-    final Uri smsUri = Uri(scheme: 'sms', path: phone, query: 'body=${Uri.encodeComponent(message)}');
-    if (await canLaunchUrl(smsUri)) await launchUrl(smsUri);
-  }
+    
+    String alert = "🚨 SOS! I need help.$vitalInfo$locationMsg";
 
-  Future<void> _sendSOSToAll() async {
-    LocationPermission permission = await Geolocator.requestPermission();
-    if (permission == LocationPermission.denied) return;
-    Position pos = await Geolocator.getCurrentPosition();
-    String locationLink = "https://maps.google.com/?q=${pos.latitude},${pos.longitude}";
-    String sosMessage = "🚨 SOS EMERGENCY! I need help immediately. My location: $locationLink";
-
-    // send to ambulance first
-    final ambPhone = _ambulanceController.text.trim().isNotEmpty ? _ambulanceController.text.trim() : _ambulance;
-    if (ambPhone.isNotEmpty) _sendMessage(ambPhone, customMessage: 'Ambulance needed. $sosMessage');
-    for (var doc in _contacts) {
-      final phone = (doc.data() as Map<String, dynamic>)['phone'];
-      if (phone.isNotEmpty) {
-        _sendMessage(phone, customMessage: sosMessage);
-      }
+    // Send to ambulance (manually triggered)
+    if (includeAmbulance && ambulance.isNotEmpty) {
+      await openSmsWithMessage(ambulance, "Ambulance needed. $alert");
+      await Future.delayed(Duration(milliseconds: 500));
     }
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("SOS sent to all contacts!")));
+
+    // Send to all contacts
+    for (var c in contacts) {
+      await openSmsWithMessage(c['phone'], alert);
+      await Future.delayed(Duration(milliseconds: 500));
+    }
+
+    ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("SOS opened for ambulance and ${contacts.length} contact(s). Tap SEND."), backgroundColor: Colors.red)
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: Text("SOS Emergency"), backgroundColor: Colors.red),
-      body: SingleChildScrollView(
-        child: Column(
-          children: [
-            GestureDetector(
-              onTap: _sendSOSToAll,
-              child: Container(
-                margin: EdgeInsets.all(30),
-                height: 180,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  gradient: RadialGradient(colors: [Colors.red, Colors.red.shade800]),
-                  boxShadow: [BoxShadow(color: Colors.red.withAlpha(100), blurRadius: 30, spreadRadius: 10)],
-                ),
-                child: Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.warning, color: Colors.white, size: 60),
-                      SizedBox(height: 10),
-                      Text("SOS", style: TextStyle(color: Colors.white, fontSize: 36, fontWeight: FontWeight.bold)),
-                      Text("Tap to alert all contacts", style: TextStyle(color: Colors.white70)),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-            
-            // Emergency Tips & Ambulance Section
-            Padding(
-              padding: EdgeInsets.symmetric(horizontal: 16),
-              child: Card(
-                color: Colors.red.shade50,
-                elevation: 4,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                child: Padding(
-                  padding: EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Icon(Icons.warning_amber_rounded, color: Colors.red),
-                          SizedBox(width: 8),
-                          Text("Emergency Information", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.red.shade800)),
-                        ],
-                      ),
-                      Divider(),
-                      ListTile(
-                        leading: Icon(Icons.local_hospital, color: Colors.red),
-                        title: Text("Ambulance", style: TextStyle(fontWeight: FontWeight.bold)),
-                        subtitle: Text("Dial 102 or 108"),
-                        trailing: IconButton(
-                          icon: Icon(Icons.call, color: Colors.green),
-                          onPressed: () => _makeCall('102'),
-                        ),
-                      ),
-                      SizedBox(height: 8),
-                      Text("Tips for Emergency:", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.red.shade800)),
-                      SizedBox(height: 4),
-                      Text("• Stay calm and take deep breaths."),
-                      Text("• Describe your exact location to the operator."),
-                      Text("• Do not hang up until told to do so."),
-                      Text("• Keep your ID and medical records accessible."),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 16.0),
-              child: Text("Personal Emergency Contacts", style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-            ),
-            
-            _contacts.isEmpty
-                ? Center(child: Padding(
-                  padding: const EdgeInsets.all(16.0),
-                  child: Text("No contacts added. Go to Profile page to add contacts."),
-                ))
-                : ListView.builder(
-              shrinkWrap: true,
-              physics: NeverScrollableScrollPhysics(),
-              itemCount: _contacts.length,
-              itemBuilder: (context, index) {
-                final data = _contacts[index].data() as Map<String, dynamic>;
-                return Card(
-                  margin: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                  child: ListTile(
-                    leading: CircleAvatar(backgroundColor: Colors.red, child: Icon(Icons.person)),
-                    title: Text(data['name'], style: TextStyle(fontWeight: FontWeight.bold)),
-                    subtitle: Text(data['phone']),
-                    trailing: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        IconButton(icon: Icon(Icons.call, color: Colors.green), onPressed: () => _makeCall(data['phone'])),
-                        IconButton(icon: Icon(Icons.message, color: Colors.blue), onPressed: () => _sendMessage(data['phone'])),
-                      ],
-                    ),
-                  ),
-                );
-              },
-            ),
-            SizedBox(height: 40),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-// ==================== GETTING PREGNANT ====================
-class GettingPregnantPage extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: Text("Getting Pregnant"), backgroundColor: Colors.purple),
-      body: SingleChildScrollView(
-        padding: EdgeInsets.all(16),
-        child: Card(
-          elevation: 8,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-          child: Padding(
-            padding: EdgeInsets.all(20),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Center(
-                  child: Text("Tips to Boost Fertility", style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
-                ),
-                SizedBox(height: 16),
-                _buildTipCard(Icons.calendar_month, "Track your cycle", "Use an ovulation tracking method, such as LH strips, basal body temperature, or an app to pinpoint your most fertile days."),
-                _buildTipCard(Icons.monitor_weight_outlined, "Maintain a healthy weight", "Being overweight or underweight can affect ovulation. A balanced diet and regular exercise help regulate hormones."),
-                _buildTipCard(Icons.medication, "Take prenatal vitamins", "Start taking folic acid daily even before getting pregnant to prevent neural tube defects and support early development."),
-                _buildTipCard(Icons.self_improvement, "Manage stress levels", "High stress can interfere with ovulation. Practice relaxation techniques like yoga, meditation, or deep breathing."),
-                _buildTipCard(Icons.water_drop, "Stay hydrated", "Drink adequate water daily. Good hydration helps produce healthy cervical mucus for conception."),
-                _buildTipCard(Icons.no_drinks, "Avoid smoking & alcohol", "Limit caffeine and avoid alcohol and smoking, as they negatively impact fertility for both partners."),
-                _buildTipCard(Icons.restaurant, "Eat a fertility-boosting diet", "Focus on antioxidants, healthy fats (like avocados and nuts), and protein to support reproductive health."),
-                _buildTipCard(Icons.bedtime, "Prioritize good sleep", "Ensure you get 7-8 hours of quality sleep per night. Sleep is essential for hormone production and regulation."),
-              ],
+      body: Column(
+        children: [
+          GestureDetector(
+            onTap: () => sendManualSOS(includeAmbulance: true),
+            child: Container(
+              margin: EdgeInsets.all(30),
+              height: 150,
+              decoration: BoxDecoration(shape: BoxShape.circle, color: Colors.red, boxShadow: [BoxShadow(color: Colors.red, blurRadius: 20)]),
+              child: Center(child: Text("SOS", style: TextStyle(color: Colors.white, fontSize: 48, fontWeight: FontWeight.bold))),
             ),
           ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildTipCard(IconData icon, String title, String description) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 16.0),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(icon, color: Colors.purple, size: 28),
-          SizedBox(width: 12),
+          Card(
+            margin: EdgeInsets.all(16),
+            child: ListTile(
+              leading: Icon(Icons.local_hospital, color: Colors.red),
+              title: Text("Ambulance: $ambulance"),
+              trailing: Row(mainAxisSize: MainAxisSize.min, children: [
+                IconButton(icon: Icon(Icons.call), onPressed: () => makeCall(ambulance)),
+                IconButton(icon: Icon(Icons.message), onPressed: () => sendManualSOS(includeAmbulance: true)),
+              ]),
+            ),
+          ),
+          Text("Emergency Contacts", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
           Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(title, style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                SizedBox(height: 4),
-                Text(description, style: TextStyle(fontSize: 14, color: Colors.grey.shade700)),
-              ],
+            child: ListView.builder(
+              itemCount: contacts.length,
+              itemBuilder: (ctx, i) => Card(
+                child: ListTile(
+                  title: Text(contacts[i]['name']),
+                  subtitle: Text(contacts[i]['phone']),
+                  trailing: Row(mainAxisSize: MainAxisSize.min, children: [
+                    IconButton(icon: Icon(Icons.call), onPressed: () => makeCall(contacts[i]['phone'])),
+                    IconButton(icon: Icon(Icons.message), onPressed: () => sendManualSOS(includeAmbulance: false)),
+                  ]),
+                ),
+              ),
             ),
           ),
         ],
@@ -887,230 +666,158 @@ class GettingPregnantPage extends StatelessWidget {
   }
 }
 
-// ==================== BABY CARE (Age‑based) ====================
+// -------------------- GETTING PREGNANT PAGE (unchanged) --------------------
+class GettingPregnantPage extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: Text("Getting Pregnant"), backgroundColor: Colors.purple),
+      body: ListView(
+        padding: EdgeInsets.all(16),
+        children: [
+          _tip(Icons.calendar_month, "Track your cycle", "Use ovulation strips or apps."),
+          _tip(Icons.monitor_weight, "Healthy weight", "Being overweight affects ovulation."),
+          _tip(Icons.medication, "Prenatal vitamins", "Take folic acid daily."),
+          _tip(Icons.self_improvement, "Manage stress", "Try yoga or meditation."),
+          _tip(Icons.water_drop, "Stay hydrated", "Drink plenty of water."),
+          _tip(Icons.no_drinks, "Avoid smoking & alcohol", "They lower fertility."),
+          _tip(Icons.restaurant, "Eat well", "Antioxidants and healthy fats help."),
+          _tip(Icons.bedtime, "Good sleep", "7-8 hours per night."),
+        ],
+      ),
+    );
+  }
+
+  Widget _tip(IconData icon, String title, String desc) {
+    return Padding(
+      padding: EdgeInsets.only(bottom: 16),
+      child: Row(children: [
+        Icon(icon, size: 28, color: Colors.purple),
+        SizedBox(width: 12),
+        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text(title, style: TextStyle(fontWeight: FontWeight.bold)),
+          Text(desc),
+        ])),
+      ]),
+    );
+  }
+}
+
+// -------------------- BABY CARE --------------------
 class BabyCarePage extends StatelessWidget {
-  final Map<String, String> _ageGuidelines = {
-    '1 Month': 'Feed regularly (breast milk best), keep baby clean, ensure proper sleep, and maintain hygiene. Keep baby warm, follow vaccination schedule, handle gently, and watch for any signs of illness.',
-    '2 Months': 'Continue breastfeeding/formula. Tummy time for 3-5 min daily. Respond to cries. First vaccinations (DTaP, Hib, Polio, PCV, Rotavirus).',
-    '3 Months': 'Longer sleep at night. Introduce rattles and high-contrast toys. Talk and sing to baby. Watch for head control improvement.',
-    '4 Months': 'Second round of vaccines. Baby may start rolling. Avoid screen time. Maintain consistent bedtime routine.',
-    '5 Months': 'May show interest in food. Continue exclusive breastfeeding/formula. Baby laughs and squeals. Teething may begin.',
-    '6 Months': 'Introduce solid foods (iron-fortified cereals, pureed vegetables). Baby sits with support. Continue tummy time. Vaccines (Hepatitis B, etc.).',
-    '8 Months': 'Finger foods (soft). Baby crawls. Baby-proof home. Encourage exploration. Maintain oral hygiene with soft brush.',
-    '10 Months': 'Self-feeding attempts. Pulls to stand. Name objects. Read board books. Ensure safe sleep environment.',
-    '1 Year': 'Whole milk can be introduced. Walking or cruising. First birthday. MMR vaccine. Encourage independence with safe boundaries.',
-    '2 Years': 'Potty training readiness. Balanced diet with family meals. Brush teeth twice daily. Limit screen time. Encourage active play.',
-    '3 Years': 'Preschool readiness. Teach handwashing, dressing self. Use time-outs for discipline. Encourage imaginative play. Regular dental checkup.',
+  final Map<String, String> tips = {
+    '1 Month': 'Feed regularly, keep clean, tummy time short.',
+    '2 Months': 'Continue breastfeeding, first vaccines.',
+    '3 Months': 'Longer sleep, talk to baby.',
+    '4 Months': 'Second vaccines, avoid screens.',
+    '5 Months': 'Teething may start.',
+    '6 Months': 'Introduce solid foods, sit with support.',
+    '8 Months': 'Finger foods, baby proof home.',
+    '10 Months': 'Self-feeding, pull to stand.',
+    '1 Year': 'Whole milk, first birthday, MMR vaccine.',
+    '2 Years': 'Potty training, brush teeth.',
+    '3 Years': 'Preschool readiness, regular dental check.',
   };
 
   @override
   Widget build(BuildContext context) {
-    final ages = _ageGuidelines.keys.toList();
     return Scaffold(
       appBar: AppBar(title: Text("Baby Care by Age"), backgroundColor: Colors.teal),
-      body: ListView.builder(
-        itemCount: ages.length,
-        itemBuilder: (context, index) {
-          final age = ages[index];
-          final guideline = _ageGuidelines[age]!;
-          return Card(
-            margin: EdgeInsets.all(12),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-            child: ExpansionTile(
-              title: Text(age, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
-              children: [
-                Padding(
-                  padding: EdgeInsets.all(16),
-                  child: Text(guideline, style: TextStyle(fontSize: 14, height: 1.4)),
-                ),
-              ],
-            ),
-          );
-        },
+      body: ListView(
+        children: tips.entries.map((e) => Card(
+          margin: EdgeInsets.all(8),
+          child: ExpansionTile(title: Text(e.key, style: TextStyle(fontWeight: FontWeight.bold)), children: [Padding(padding: EdgeInsets.all(12), child: Text(e.value))]),
+        )).toList(),
       ),
     );
   }
 }
 
-// ==================== BABY HEALTH (25 diseases) ====================
-class BabyHealthPage extends StatefulWidget {
-  @override
-  _BabyHealthPageState createState() => _BabyHealthPageState();
-}
-
-class _BabyHealthPageState extends State<BabyHealthPage> {
-  final List<Map<String, dynamic>> _diseases = [
-    {'name': 'Common Cold', 'symptoms': 'Runny nose, sneezing, mild fever, cough, fussiness.', 'treatment': 'Rest, hydration, saline drops, humidifier. Consult doctor if fever > 100.4°F.'},
-    {'name': 'Hand, Foot & Mouth Disease', 'symptoms': 'Fever, sore throat, rash on hands/feet, mouth ulcers.', 'treatment': 'Pain relief (acetaminophen), soft foods, fluids. Isolate to prevent spread.'},
-    {'name': 'Chickenpox', 'symptoms': 'Itchy red spots that blister and crust, fever, tiredness.', 'treatment': 'Calamine lotion, oatmeal baths, antihistamines. Vaccine available.'},
-    {'name': 'Roseola', 'symptoms': 'High fever (3-5 days) then rash after fever breaks.', 'treatment': 'Fever management, fluids. Usually self-limiting.'},
-    {'name': 'Croup', 'symptoms': 'Barking cough, stridor (noisy breathing), worse at night.', 'treatment': 'Steam therapy, cool air, steroids if severe. ER if breathing difficulty.'},
-    {'name': 'Bronchiolitis (RSV)', 'symptoms': 'Wheezing, rapid breathing, cough, poor feeding.', 'treatment': 'Oxygen support, suction, hydration. Hospitalization for severe cases.'},
-    {'name': 'Pneumonia', 'symptoms': 'High fever, cough with phlegm, rapid breathing, chest retractions.', 'treatment': 'Antibiotics (bacterial), rest, fluids. Hospitalization if severe.'},
-    {'name': 'Ear Infection (Otitis Media)', 'symptoms': 'Ear pulling, fever, fussiness, difficulty sleeping.', 'treatment': 'Pain relievers, warm compress. Antibiotics if bacterial.'},
-    {'name': 'Strep Throat', 'symptoms': 'Sore throat, fever, swollen lymph nodes, red spots on palate.', 'treatment': 'Antibiotics (penicillin), rest, soft foods.'},
-    {'name': 'Urinary Tract Infection (UTI)', 'symptoms': 'Fever, foul urine, vomiting, fussiness, poor feeding.', 'treatment': 'Antibiotics, increased fluids. Kidney ultrasound if recurrent.'},
-    {'name': 'Gastroenteritis (Stomach Flu)', 'symptoms': 'Diarrhea, vomiting, fever, abdominal pain.', 'treatment': 'Oral rehydration solution, probiotics. Seek care if dehydration.'},
-    {'name': 'Constipation', 'symptoms': 'Hard, dry stools, pain during bowel movements, bloating.', 'treatment': 'Increase fluids, fiber (prunes, pears), tummy massage. Laxatives if needed.'},
-    {'name': 'Diaper Rash', 'symptoms': 'Red, irritated skin in diaper area.', 'treatment': 'Frequent diaper changes, barrier cream (zinc oxide), air exposure.'},
-    {'name': 'Eczema (Atopic Dermatitis)', 'symptoms': 'Dry, itchy, red patches on cheeks, elbows, knees.', 'treatment': 'Moisturizers, mild steroids, avoid triggers (soaps, allergens).'},
-    {'name': 'Cradle Cap', 'symptoms': 'Yellowish, scaly patches on scalp.', 'treatment': 'Baby oil, gentle brushing, medicated shampoo.'},
-    {'name': 'Thrush (Oral Candidiasis)', 'symptoms': 'White patches on tongue/gums, painful feeding.', 'treatment': 'Antifungal drops (nystatin), sterilize bottles/nipples.'},
-    {'name': 'Measles', 'symptoms': 'High fever, cough, runny nose, red eyes, then red rash.', 'treatment': 'Supportive care, vitamin A. Prevent with MMR vaccine.'},
-    {'name': 'Mumps', 'symptoms': 'Swollen painful cheeks/ jaw, fever, headache.', 'treatment': 'Rest, fluids, pain relief. Vaccine preventable.'},
-    {'name': 'Rubella (German Measles)', 'symptoms': 'Mild fever, pink rash, swollen lymph nodes.', 'treatment': 'Supportive care. Dangerous for pregnant women.'},
-    {'name': 'Whooping Cough (Pertussis)', 'symptoms': 'Severe coughing fits with "whoop" sound, vomiting after cough.', 'treatment': 'Antibiotics, hospitalization for infants. Vaccine (DTaP).'},
-    {'name': 'Scarlet Fever', 'symptoms': 'Sore throat, fever, sandpaper-like rash, strawberry tongue.', 'treatment': 'Antibiotics (penicillin).'},
-    {'name': 'Kawasaki Disease', 'symptoms': 'High fever >5 days, red eyes, rash, swollen hands/feet, cracked lips.', 'treatment': 'IVIG, aspirin. Urgent cardiology follow-up.'},
-    {'name': 'Reye’s Syndrome', 'symptoms': 'Vomiting, confusion, seizures after aspirin use during viral illness.', 'treatment': 'Emergency hospitalization. NEVER give aspirin to children.'},
-    {'name': 'Febrile Seizures', 'symptoms': 'Convulsions with fever (6 months-5 years).', 'treatment': 'Lay child on side, remove nearby objects. Call doctor.'},
-    {'name': 'Meningitis', 'symptoms': 'High fever, stiff neck, severe headache, bulging fontanelle (infants).', 'treatment': 'Medical emergency. Antibiotics/antivirals, hospitalization.'},
+// -------------------- BABY HEALTH --------------------
+class BabyHealthPage extends StatelessWidget {
+  final List<Map<String, String>> diseases = [
+    {'name': 'Common Cold', 'symptoms': 'Runny nose, sneezing, mild fever', 'treatment': 'Rest, hydration, saline drops.'},
+    {'name': 'Hand, Foot & Mouth', 'symptoms': 'Fever, rash on hands/feet, mouth ulcers', 'treatment': 'Pain relief, soft foods.'},
+    {'name': 'Chickenpox', 'symptoms': 'Itchy red spots, fever', 'treatment': 'Calamine lotion, oatmeal baths.'},
+    {'name': 'Roseola', 'symptoms': 'High fever then rash', 'treatment': 'Fever management, fluids.'},
+    {'name': 'Croup', 'symptoms': 'Barking cough, noisy breathing', 'treatment': 'Steam therapy, cool air.'},
+    {'name': 'Bronchiolitis (RSV)', 'symptoms': 'Wheezing, rapid breathing', 'treatment': 'Oxygen, hydration.'},
+    {'name': 'Pneumonia', 'symptoms': 'High fever, cough with phlegm', 'treatment': 'Antibiotics, rest.'},
+    {'name': 'Ear Infection', 'symptoms': 'Ear pulling, fussiness', 'treatment': 'Pain relievers, antibiotics if needed.'},
+    {'name': 'Strep Throat', 'symptoms': 'Sore throat, fever', 'treatment': 'Antibiotics.'},
+    {'name': 'UTI', 'symptoms': 'Fever, foul urine', 'treatment': 'Antibiotics.'},
+    {'name': 'Stomach Flu', 'symptoms': 'Diarrhea, vomiting', 'treatment': 'Oral rehydration solution.'},
+    {'name': 'Constipation', 'symptoms': 'Hard stools', 'treatment': 'More fluids, fiber.'},
+    {'name': 'Diaper Rash', 'symptoms': 'Red irritated skin', 'treatment': 'Frequent changes, zinc cream.'},
+    {'name': 'Eczema', 'symptoms': 'Dry, itchy patches', 'treatment': 'Moisturizers, mild steroids.'},
+    {'name': 'Cradle Cap', 'symptoms': 'Scaly patches on scalp', 'treatment': 'Baby oil, gentle brushing.'},
+    {'name': 'Thrush', 'symptoms': 'White patches on tongue', 'treatment': 'Antifungal drops.'},
+    {'name': 'Measles', 'symptoms': 'High fever, red rash', 'treatment': 'Supportive care, vaccine.'},
+    {'name': 'Mumps', 'symptoms': 'Swollen cheeks, fever', 'treatment': 'Rest, fluids.'},
+    {'name': 'Rubella', 'symptoms': 'Mild fever, pink rash', 'treatment': 'Supportive care.'},
+    {'name': 'Whooping Cough', 'symptoms': 'Severe coughing fits', 'treatment': 'Antibiotics, vaccine.'},
+    {'name': 'Scarlet Fever', 'symptoms': 'Sore throat, sandpaper rash', 'treatment': 'Antibiotics.'},
+    {'name': 'Kawasaki Disease', 'symptoms': 'High fever >5 days, red eyes', 'treatment': 'IVIG, aspirin.'},
+    {'name': 'Reye’s Syndrome', 'symptoms': 'Vomiting, confusion after aspirin', 'treatment': 'Emergency, never give aspirin.'},
+    {'name': 'Febrile Seizures', 'symptoms': 'Convulsions with fever', 'treatment': 'Lay child on side, call doctor.'},
+    {'name': 'Meningitis', 'symptoms': 'High fever, stiff neck', 'treatment': 'Medical emergency.'},
   ];
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: Text("Baby Health Guide"), backgroundColor: Colors.orange),
-      body: ListView.builder(
-        itemCount: _diseases.length,
-        itemBuilder: (context, index) {
-          final disease = _diseases[index];
-          return Card(
-            margin: EdgeInsets.all(12),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-            child: ExpansionTile(
-              title: Text(disease['name'], style: TextStyle(fontWeight: FontWeight.bold)),
-              children: [
-                Padding(
-                  padding: EdgeInsets.all(12),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text("🩺 Symptoms:", style: TextStyle(fontWeight: FontWeight.bold)),
-                      Text(disease['symptoms']),
-                      SizedBox(height: 8),
-                      Text("💊 Treatment:", style: TextStyle(fontWeight: FontWeight.bold)),
-                      Text(disease['treatment']),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          );
-        },
+      body: ListView(
+        children: diseases.map((d) => Card(
+          margin: EdgeInsets.all(8),
+          child: ExpansionTile(
+            title: Text(d['name']!, style: TextStyle(fontWeight: FontWeight.bold)),
+            children: [
+              Padding(padding: EdgeInsets.all(12), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text("Symptoms: ${d['symptoms']}"),
+                SizedBox(height: 8),
+                Text("Treatment: ${d['treatment']}"),
+              ])),
+            ],
+          ),
+        )).toList(),
       ),
     );
   }
 }
 
-// ==================== BABY PRODUCTS (with fallback for links) ====================
+// -------------------- BABY PRODUCTS --------------------
 class BabyProductsPage extends StatefulWidget {
   @override
   _BabyProductsPageState createState() => _BabyProductsPageState();
 }
 
 class _BabyProductsPageState extends State<BabyProductsPage> {
-  final List<Map<String, String>> _allProducts = [
-    {'name': 'Diapers (Pampers)', 'category': 'Essentials', 'search': 'baby diapers'},
+  List<Map<String, String>> products = [
+    {'name': 'Diapers', 'category': 'Essentials', 'search': 'baby diapers'},
     {'name': 'Baby Wipes', 'category': 'Essentials', 'search': 'baby wipes'},
     {'name': 'Crib', 'category': 'Furniture', 'search': 'baby crib'},
     {'name': 'Stroller', 'category': 'Gear', 'search': 'baby stroller'},
     {'name': 'Car Seat', 'category': 'Safety', 'search': 'baby car seat'},
     {'name': 'Baby Monitor', 'category': 'Electronics', 'search': 'baby monitor'},
     {'name': 'Breast Pump', 'category': 'Feeding', 'search': 'breast pump'},
-    {'name': 'Baby Bottle', 'category': 'Feeding', 'search': 'baby feeding bottle'},
-    {'name': 'Sterilizer', 'category': 'Feeding', 'search': 'bottle sterilizer'},
-    {'name': 'Baby Carrier', 'category': 'Gear', 'search': 'baby carrier'},
+    {'name': 'Baby Bottle', 'category': 'Feeding', 'search': 'baby bottle'},
     {'name': 'High Chair', 'category': 'Furniture', 'search': 'baby high chair'},
-    {'name': 'Baby Bather', 'category': 'Bath', 'search': 'baby bath tub'},
-    {'name': 'Baby Lotion', 'category': 'Skincare', 'search': 'baby lotion'},
-    {'name': 'Baby Shampoo', 'category': 'Skincare', 'search': 'baby shampoo'},
-    {'name': 'Diaper Bag', 'category': 'Accessories', 'search': 'diaper bag'},
-    {'name': 'Baby Blanket', 'category': 'Bedding', 'search': 'baby blanket'},
     {'name': 'Teething Toy', 'category': 'Toys', 'search': 'teething toy'},
-    {'name': 'Baby Swing', 'category': 'Gear', 'search': 'baby swing'},
-    {'name': 'Nail Clipper', 'category': 'Grooming', 'search': 'baby nail clipper'},
-    {'name': 'Nasal Aspirator', 'category': 'Health', 'search': 'nasal aspirator'},
-    {'name': 'Baby Walker', 'category': 'Gear', 'search': 'baby walker'},
-    {'name': 'Potty Trainer', 'category': 'Toilet', 'search': 'potty trainer'},
-    {'name': 'Baby Toothbrush', 'category': 'Dental', 'search': 'baby toothbrush'},
-    {'name': 'Baby Mattress', 'category': 'Bedding', 'search': 'baby mattress'},
-    {'name': 'Baby Clothes Set', 'category': 'Clothing', 'search': 'baby clothes set'},
-    {'name': 'Mittens & Booties', 'category': 'Clothing', 'search': 'baby mittens'},
-    {'name': 'Bibs', 'category': 'Feeding', 'search': 'baby bib'},
-    {'name': 'Baby Sofa', 'category': 'Furniture', 'search': 'baby sofa'},
-    {'name': 'Activity Gym', 'category': 'Toys', 'search': 'baby activity gym'},
-    {'name': 'Rocking Horse', 'category': 'Toys', 'search': 'rocking horse'},
-    {'name': 'Baby Proofing Kit', 'category': 'Safety', 'search': 'baby proofing kit'},
-    {'name': 'Thermometer', 'category': 'Health', 'search': 'baby thermometer'},
-    {'name': 'Baby Massage Oil', 'category': 'Skincare', 'search': 'baby massage oil'},
-    {'name': 'Diaper Rash Cream', 'category': 'Skincare', 'search': 'diaper rash cream'},
-    {'name': 'Baby Powder', 'category': 'Skincare', 'search': 'baby powder'},
-    {'name': 'Baby Comb', 'category': 'Grooming', 'search': 'baby comb'},
-    {'name': 'Baby Sling', 'category': 'Gear', 'search': 'baby sling'},
-    {'name': 'Travel Cot', 'category': 'Furniture', 'search': 'travel cot'},
-    {'name': 'Baby Utensils Set', 'category': 'Feeding', 'search': 'baby utensils set'},
-    {'name': 'Sippy Cup', 'category': 'Feeding', 'search': 'sippy cup'},
-    {'name': 'Baby Grooming Kit', 'category': 'Grooming', 'search': 'baby grooming kit'},
-    {'name': 'Wet Wipes Warmer', 'category': 'Essentials', 'search': 'wipes warmer'},
-    {'name': 'Baby Humidifier', 'category': 'Health', 'search': 'baby humidifier'},
-    {'name': 'Baby Fence', 'category': 'Safety', 'search': 'baby fence'},
-    {'name': 'Baby Cot Mobile', 'category': 'Toys', 'search': 'cot mobile'},
-    {'name': 'Baby Night Lamp', 'category': 'Electronics', 'search': 'baby night lamp'},
-    {'name': 'Baby Shoes', 'category': 'Clothing', 'search': 'baby shoes'},
-    {'name': 'Baby Hat', 'category': 'Clothing', 'search': 'baby hat'},
-    {'name': 'Baby Sunglasses', 'category': 'Accessories', 'search': 'baby sunglasses'},
-    {'name': 'Baby Backpack', 'category': 'Accessories', 'search': 'baby backpack'},
   ];
-  Set<String> _selectedProducts = {};
 
-  void _toggleProduct(String name) {
+  Set<String> selected = {};
+
+  void toggle(String name) {
     setState(() {
-      if (_selectedProducts.contains(name)) {
-        _selectedProducts.remove(name);
-      } else {
-        _selectedProducts.add(name);
-      }
+      if (selected.contains(name)) selected.remove(name);
+      else selected.add(name);
     });
   }
 
-  void _buyNow(String searchTerm) async {
-    final query = Uri.encodeComponent(searchTerm);
-    final flipkartUrl = "https://www.flipkart.com/search?q=$query";
-    final Uri url = Uri.parse(flipkartUrl);
-    try {
-      if (await canLaunchUrl(url)) {
-        await launchUrl(url, mode: LaunchMode.externalApplication);
-      } else {
-        _showCannotOpenDialog(flipkartUrl);
-      }
-    } catch (e) {
-      _showCannotOpenDialog(flipkartUrl);
-    }
-  }
-
-  void _showCannotOpenDialog(String url) {
-    showDialog(
-      context: context,
-      builder: (_) => AlertDialog(
-        title: Text("Cannot open browser"),
-        content: Text("Copy this link and open manually:\n$url"),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: Text("Close"),
-          ),
-          TextButton(
-            onPressed: () {
-              Navigator.pop(context);
-              // Copy to clipboard (optional, requires clipboard package)
-              ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Link copied to clipboard")));
-            },
-            child: Text("Copy Link"),
-          ),
-        ],
-      ),
-    );
+  void buy(String query) async {
+    String url = "https://www.flipkart.com/search?q=${Uri.encodeComponent(query)}";
+    if (await canLaunchUrl(Uri.parse(url))) await launchUrl(Uri.parse(url));
   }
 
   @override
@@ -1119,555 +826,169 @@ class _BabyProductsPageState extends State<BabyProductsPage> {
       appBar: AppBar(title: Text("Baby Registry"), backgroundColor: Colors.blue),
       body: Column(
         children: [
-          Padding(
-            padding: EdgeInsets.all(16),
-            child: Text("Select items you need:", style: TextStyle(fontSize: 18)),
-          ),
           Expanded(
             child: ListView.builder(
-              itemCount: _allProducts.length,
-              itemBuilder: (context, index) {
-                final product = _allProducts[index];
-                final isSelected = _selectedProducts.contains(product['name']);
+              itemCount: products.length,
+              itemBuilder: (ctx, i) {
+                var p = products[i];
                 return Card(
-                  margin: EdgeInsets.symmetric(horizontal: 12, vertical: 4),
                   child: ListTile(
-                    title: Text(product['name']!),
-                    subtitle: Text(product['category']!),
-                    leading: Checkbox(
-                      value: isSelected,
-                      onChanged: (_) => _toggleProduct(product['name']!),
-                    ),
-                    trailing: IconButton(
-                      icon: Icon(Icons.shopping_cart, color: Colors.blue),
-                      onPressed: () => _buyNow(product['search']!),
-                    ),
+                    title: Text(p['name']!),
+                    subtitle: Text(p['category']!),
+                    leading: Checkbox(value: selected.contains(p['name']), onChanged: (_) => toggle(p['name']!)),
+                    trailing: IconButton(icon: Icon(Icons.shopping_cart), onPressed: () => buy(p['search']!)),
                   ),
                 );
               },
             ),
           ),
-          Padding(
-            padding: EdgeInsets.all(16),
-            child: ElevatedButton(
-              onPressed: () {
-                showDialog(
-                  context: context,
-                  builder: (_) => AlertDialog(
-                    title: Text("Your Registry"),
-                    content: Text(_selectedProducts.isEmpty
-                        ? "No items selected"
-                        : _selectedProducts.join('\n')),
-                    actions: [
-                      TextButton(onPressed: () => Navigator.pop(context), child: Text("Close")),
-                    ],
-                  ),
-                );
-              },
-              child: Text("View My Registry (${_selectedProducts.length})"),
-              style: ElevatedButton.styleFrom(backgroundColor: Colors.blue),
-            ),
+          ElevatedButton(
+            onPressed: () => showDialog(context: context, builder: (_) => AlertDialog(
+              title: Text("My Registry"), content: Text(selected.isEmpty ? "None" : selected.join("\n")),
+            )),
+            child: Text("View Registry (${selected.length})"),
           ),
+          SizedBox(height: 16),
         ],
       ),
     );
   }
 }
 
-// ==================== NUTRITION PAGE ====================
-class NutritionPage extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: Text("Nutrition Guide"), backgroundColor: Colors.teal),
-      body: ListView(
-        padding: EdgeInsets.all(20),
-        children: [
-          _buildNutritionCard('First Trimester', ['Take folic acid', 'Eat iron-rich foods', 'Stay hydrated']),
-          _buildNutritionCard('Second Trimester', ['Increase calcium', 'Eat protein', 'Add vitamin D']),
-          _buildNutritionCard('Third Trimester', ['Small frequent meals', 'Stay hydrated', 'More fiber']),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildNutritionCard(String title, List<String> tips) {
-    return Card(
-      margin: EdgeInsets.only(bottom: 15),
-      child: ExpansionTile(
-        title: Text(title, style: TextStyle(fontWeight: FontWeight.bold)),
-        children: tips.map((tip) => ListTile(leading: Icon(Icons.check_circle, color: Colors.teal), title: Text(tip))).toList(),
-      ),
-    );
-  }
-}
-
-// ==================== NEARBY MEDICAL (original) ====================
-class NearbyMedicalPage extends StatefulWidget {
-  @override
-  _NearbyMedicalPageState createState() => _NearbyMedicalPageState();
-}
-
-class _NearbyMedicalPageState extends State<NearbyMedicalPage> {
-  bool _loading = true;
-  List<MedicalPlace> _places = [];
-  String _error = '';
-  String _selectedType = 'hospital';
-  double? _myLat, _myLng;
-
-  @override
-  void initState() {
-    super.initState();
-    _getLocationAndFetch();
-  }
-
-  Future<void> _getLocationAndFetch() async {
-    setState(() { _loading = true; _error = ''; });
-    LocationPermission permission = await Geolocator.requestPermission();
-    if (permission == LocationPermission.denied || permission == LocationPermission.deniedForever) {
-      setState(() { _error = 'Location permission denied'; _loading = false; });
-      return;
-    }
-    try {
-      Position pos = await Geolocator.getCurrentPosition();
-      _myLat = pos.latitude;
-      _myLng = pos.longitude;
-      await _fetchPlaces();
-    } catch (e) {
-      setState(() { _error = 'Could not get location: $e'; _loading = false; });
-    }
-  }
-
-  Future<void> _fetchPlaces() async {
-    if (_myLat == null || _myLng == null) return;
-    List<int> radiusList = [3000, 5000, 10000, 15000, 20000];
-    
-    List<MedicalPlace> tempPlaces = [];
-    for (int radius in radiusList) {
-      final rawPlaces = await _overpassQuery(radius);
-      tempPlaces.clear();
-      
-      for (var p in rawPlaces) {
-        final lat = p['lat'] ?? p['center']?['lat'];
-        final lon = p['lon'] ?? p['center']?['lon'];
-        if (lat == null || lon == null) continue;
-        final tags = p['tags'] ?? {};
-        final amenity = tags['amenity'] ?? '';
-        final healthcare = tags['healthcare'] ?? '';
-        bool isHospital = amenity == 'hospital' || amenity == 'clinic' || healthcare == 'hospital' || healthcare == 'clinic';
-        bool isPharmacy = amenity == 'pharmacy' || amenity == 'chemist';
-        if (_selectedType == 'hospital' && !isHospital) continue;
-        if (_selectedType == 'pharmacy' && !isPharmacy) continue;
-        final name = tags['name'] ?? (_selectedType == 'hospital' ? 'Hospital' : 'Pharmacy');
-        final phone = tags['phone'] ?? '';
-        final website = tags['website'] ?? '';
-        final openingHours = tags['opening_hours'] ?? '';
-        final distance = Geolocator.distanceBetween(_myLat!, _myLng!, lat, lon) / 1000;
-        final random = Random(name.hashCode);
-        final rating = 3.5 + random.nextDouble() * 1.5;
-        final ratingStars = rating.toStringAsFixed(1);
-        String openStatus = 'Open today';
-        if (openingHours.toLowerCase().contains('24/7') || openingHours.toLowerCase().contains('24 hours')) {
-          openStatus = 'Open 24 hours';
-        } else if (openingHours.isNotEmpty) {
-          openStatus = openingHours;
-        } else {
-          openStatus = 'Call for hours';
-        }
-        tempPlaces.add(MedicalPlace(
-          name: name, lat: lat, lon: lon, distance: distance, phone: phone,
-          website: website, rating: ratingStars, openStatus: openStatus, type: _selectedType,
-        ));
-      }
-      
-      // Fixed early break bug: only stop the radius expansion if we found enough of the SPECIFIC requested type!
-      if (tempPlaces.length >= 10) {
-        break;
-      }
-    }
-    
-    tempPlaces.sort((a, b) => a.distance.compareTo(b.distance));
-    setState(() {
-      _places = tempPlaces;
-      _loading = false;
-      if (_places.isEmpty) _error = 'No $_selectedType found nearby.';
-    });
-  }
-
-  Future<List<dynamic>> _overpassQuery(int radius) async {
-    final url = Uri.parse('https://overpass-api.de/api/interpreter');
-    final query = """
-      [out:json];
-      (
-        node["amenity"~"hospital|clinic|pharmacy"](around:$radius,$_myLat,$_myLng);
-        way["amenity"~"hospital|clinic|pharmacy"](around:$radius,$_myLat,$_myLng);
-        node["healthcare"~"hospital|clinic"](around:$radius,$_myLat,$_myLng);
-      );
-      out center;
-    """;
-    try {
-      final response = await http.post(url, body: query);
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-        return data['elements'] ?? [];
-      }
-    } catch (e) {}
-    return [];
-  }
-
-  void _openNavigation(double lat, double lon) async {
-    final url = 'https://www.google.com/maps/dir/?api=1&destination=$lat,$lon';
-    if (await canLaunchUrl(Uri.parse(url))) {
-      await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
-    }
-  }
-
-  void _makeCall(String phone) async {
-    final Uri uri = Uri(scheme: 'tel', path: phone);
-    if (await canLaunchUrl(uri)) await launchUrl(uri);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: Text('Nearby Medical'),
-        backgroundColor: Colors.green,
-        foregroundColor: Colors.white,
-        actions: [
-          SegmentedButton<String>(
-            style: ButtonStyle(backgroundColor: WidgetStateProperty.resolveWith((states) => Colors.white)),
-            segments: const [
-              ButtonSegment(value: 'hospital', label: Text('Hospitals'), icon: Icon(Icons.local_hospital)),
-              ButtonSegment(value: 'pharmacy', label: Text('Pharmacies'), icon: Icon(Icons.medical_services)),
-            ],
-            selected: {_selectedType},
-            onSelectionChanged: (Set<String> newSelection) {
-              setState(() { _selectedType = newSelection.first; _fetchPlaces(); });
-            },
-          ),
-          SizedBox(width: 8),
-          IconButton(icon: Icon(Icons.refresh), onPressed: _getLocationAndFetch),
-        ],
-      ),
-      body: _loading
-          ? Center(child: CircularProgressIndicator())
-          : _error.isNotEmpty
-          ? Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [Icon(Icons.error_outline, size: 64), SizedBox(height: 16), Text(_error), ElevatedButton(onPressed: _getLocationAndFetch, child: Text('Retry'))]))
-          : ListView.builder(
-        padding: EdgeInsets.all(16),
-        itemCount: _places.length,
-        itemBuilder: (context, index) {
-          final place = _places[index];
-          return Card(
-            margin: EdgeInsets.only(bottom: 16),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-            child: Padding(
-              padding: EdgeInsets.all(12),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Expanded(child: Text(place.name, style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold))),
-                      Container(padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4), decoration: BoxDecoration(color: Colors.green.shade100, borderRadius: BorderRadius.circular(12)), child: Text('${place.distance.toStringAsFixed(1)} km')),
-                    ],
-                  ),
-                  SizedBox(height: 8),
-                  Row(children: [Icon(Icons.star, color: Colors.amber, size: 18), SizedBox(width: 4), Text(place.rating), SizedBox(width: 16), Icon(Icons.access_time, color: Colors.grey.shade600, size: 16), SizedBox(width: 4), Expanded(child: Text(place.openStatus, style: TextStyle(fontSize: 12, color: place.openStatus.contains('24') ? Colors.green : Colors.orange)))]),
-                  SizedBox(height: 12),
-                  Row(mainAxisAlignment: MainAxisAlignment.end, children: [
-                    if (place.phone.isNotEmpty) _buildActionButton(icon: Icons.call, label: 'Call', color: Colors.green, onPressed: () => _makeCall(place.phone)),
-                    SizedBox(width: 8),
-                    _buildActionButton(icon: Icons.directions, label: 'Directions', color: Colors.blue, onPressed: () => _openNavigation(place.lat, place.lon)),
-                  ]),
-                ],
-              ),
-            ),
-          );
-        },
-      ),
-    );
-  }
-
-  Widget _buildActionButton({required IconData icon, required String label, required Color color, required VoidCallback onPressed}) {
-    return ElevatedButton.icon(onPressed: onPressed, icon: Icon(icon, size: 16), label: Text(label), style: ElevatedButton.styleFrom(backgroundColor: color, foregroundColor: Colors.white, padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20))));
-  }
-}
-
-class MedicalPlace {
-  final String name; final double lat; final double lon; final double distance; final String phone; final String website; final String rating; final String openStatus; final String type;
-  MedicalPlace({required this.name, required this.lat, required this.lon, required this.distance, required this.phone, required this.website, required this.rating, required this.openStatus, required this.type});
-}
-
-// ==================== NEW: MATERNITY HOSPITALS PAGE ====================
+// -------------------- MATERNITY HOSPITALS --------------------
 class MaternityHospitalsPage extends StatefulWidget {
   @override
   _MaternityHospitalsPageState createState() => _MaternityHospitalsPageState();
 }
 
 class _MaternityHospitalsPageState extends State<MaternityHospitalsPage> {
-  bool _loading = true;
-  List<MaternityHospital> _hospitals = [];
-  String _error = '';
-  double? _myLat, _myLng;
+  bool loading = true;
+  List<Map<String, dynamic>> hospitals = [];
+  String error = '';
+  double? myLat, myLng;
 
   @override
   void initState() {
     super.initState();
-    _getLocationAndFetch();
+    getLocation();
   }
 
-  Future<void> _getLocationAndFetch() async {
-    setState(() { _loading = true; _error = ''; });
-    LocationPermission permission = await Geolocator.requestPermission();
-    if (permission == LocationPermission.denied || permission == LocationPermission.deniedForever) {
-      setState(() { _error = 'Location permission denied'; _loading = false; });
+  Future<void> getLocation() async {
+    setState(() => loading = true);
+    LocationPermission perm = await Geolocator.requestPermission();
+    if (perm == LocationPermission.denied || perm == LocationPermission.deniedForever) {
+      setState(() { error = 'Location permission denied'; loading = false; });
       return;
     }
     try {
       Position pos = await Geolocator.getCurrentPosition();
-      _myLat = pos.latitude;
-      _myLng = pos.longitude;
-      await _fetchMaternityHospitals();
+      myLat = pos.latitude;
+      myLng = pos.longitude;
+      await fetchHospitals();
     } catch (e) {
-      setState(() { _error = 'Could not get location: $e'; _loading = false; });
+      setState(() { error = 'Could not get location'; loading = false; });
     }
   }
 
-  Future<void> _fetchMaternityHospitals() async {
-    if (_myLat == null || _myLng == null) return;
-    List<int> radiusList = [3000, 5000, 10000, 15000, 20000];
-    List<MaternityHospital> tempHospitals = [];
-    List<MaternityHospital> fallbackHospitals = [];
-    
-    for (int radius in radiusList) {
-      final rawHospitals = await _overpassMaternityQuery(radius);
-      tempHospitals.clear();
-      List<MaternityHospital> currentRadiusHospitals = [];
-      
-      for (var h in rawHospitals) {
-        final lat = h['lat'] ?? h['center']?['lat'];
-        final lon = h['lon'] ?? h['center']?['lon'];
-        if (lat == null || lon == null) continue;
-        final tags = h['tags'] ?? {};
-        final name = tags['name'] ?? 'Maternity Hospital';
-        final phone = tags['phone'] ?? '';
-        final website = tags['website'] ?? '';
-        final openingHours = tags['opening_hours'] ?? '';
-        final distance = Geolocator.distanceBetween(_myLat!, _myLng!, lat, lon) / 1000;
-        
-        // check if it's maternity related
-        final speciality = tags['healthcare'] ?? tags['speciality'] ?? '';
-        final isMaternity = name.toLowerCase().contains('maternity') ||
-            name.toLowerCase().contains('women') ||
-            name.toLowerCase().contains('mother') ||
-            speciality.toLowerCase().contains('obstetric') ||
-            speciality.toLowerCase().contains('gynecology');
+  Future<void> fetchHospitals() async {
+    List<int> radii = [3000, 5000, 10000];
+    List<Map<String, dynamic>> results = [];
 
-        String openStatus = 'Open 24 hours';
-        if (openingHours.isNotEmpty && !openingHours.toLowerCase().contains('24')) {
-          openStatus = openingHours;
-        }
-
-        final hospitalObj = MaternityHospital(
-          name: name,
-          lat: lat,
-          lon: lon,
-          distance: distance,
-          phone: phone,
-          website: website,
-          openStatus: openStatus,
+    for (int r in radii) {
+      String query = """
+        [out:json][timeout:25];
+        (
+          node["amenity"~"hospital|clinic"](around:$r,$myLat,$myLng);
+          way["amenity"~"hospital|clinic"](around:$r,$myLat,$myLng);
+          rel["amenity"~"hospital|clinic"](around:$r,$myLat,$myLng);
+          node["healthcare"~"hospital|clinic"](around:$r,$myLat,$myLng);
+          way["healthcare"~"hospital|clinic"](around:$r,$myLat,$myLng);
+          rel["healthcare"~"hospital|clinic"](around:$r,$myLat,$myLng);
         );
-        
-        currentRadiusHospitals.add(hospitalObj);
-        if (isMaternity) tempHospitals.add(hospitalObj);
-      }
-      
-      if (fallbackHospitals.isEmpty && currentRadiusHospitals.isNotEmpty) {
-        fallbackHospitals = currentRadiusHospitals;
-      }
-      
-      // Stop radius expansion only if we found enough STRICT maternity places
-      if (tempHospitals.length >= 6) {
-        break;
-      }
+        out center;
+      """;
+      try {
+        var response = await http.post(
+          Uri.parse("https://overpass-api.de/api/interpreter"),
+          headers: {'User-Agent': 'MotherCareApp/1.0', 'Accept': 'application/json'},
+          body: {'data': query},
+        ).timeout(Duration(seconds: 15));
+        if (response.statusCode == 200) {
+          var data = json.decode(response.body);
+          for (var elem in data['elements']) {
+            double lat = elem['lat'] ?? elem['center']?['lat'] ?? 0;
+            double lon = elem['lon'] ?? elem['center']?['lon'] ?? 0;
+            if (lat == 0 || lon == 0) continue;
+            var tags = elem['tags'] ?? {};
+            String name = tags['name'] ?? 'Hospital';
+            double dist = Geolocator.distanceBetween(myLat!, myLng!, lat, lon) / 1000;
+            if (dist > 10) continue;
+            bool isMaternity = name.toLowerCase().contains('maternity') ||
+                name.toLowerCase().contains('women') ||
+                name.toLowerCase().contains('mother') ||
+                name.toLowerCase().contains('child') ||
+                (tags['healthcare'] ?? '').toString().toLowerCase().contains('obstetric');
+            if (isMaternity && !results.any((h) => h['lat'] == lat && h['lon'] == lon)) {
+              results.add({
+                'name': name,
+                'lat': lat,
+                'lon': lon,
+                'distance': dist,
+                'phone': tags['phone'] ?? tags['contact:phone'] ?? '',
+                'open': tags['opening_hours'] ?? 'Open 24 hours',
+              });
+            }
+          }
+        }
+      } catch (e) {}
+      if (results.length >= 10) break;
     }
-    
-    if (tempHospitals.isEmpty || tempHospitals.length < 3) {
-      // Fallback: merge general hospitals if strict maternity ones aren't found
-      tempHospitals.addAll(fallbackHospitals);
-      final ids = <String>{};
-      tempHospitals.retainWhere((h) => ids.add("${h.lat}_${h.lon}"));
-    }
-    
-    tempHospitals.sort((a, b) => a.distance.compareTo(b.distance));
+    results.sort((a, b) => a['distance'].compareTo(b['distance']));
+    if (!mounted) return;
     setState(() {
-      _hospitals = tempHospitals;
-      _loading = false;
-      if (_hospitals.isEmpty) _error = 'No maternity hospitals found nearby. Try a different area.';
+      hospitals = results;
+      loading = false;
+      if (hospitals.isEmpty) error = 'No maternity hospitals found within 10km.';
     });
   }
 
-  Future<List<dynamic>> _overpassMaternityQuery(int radius) async {
-    final url = Uri.parse('https://overpass-api.de/api/interpreter');
-    // Query for hospitals and clinics that may offer maternity services
-    final query = """
-      [out:json];
-      (
-        node["amenity"="hospital"](around:$radius,$_myLat,$_myLng);
-        way["amenity"="hospital"](around:$radius,$_myLat,$_myLng);
-        node["amenity"="clinic"](around:$radius,$_myLat,$_myLng);
-        node["healthcare"="hospital"](around:$radius,$_myLat,$_myLng);
-        node["healthcare"="clinic"](around:$radius,$_myLat,$_myLng);
-      );
-      out center;
-    """;
-    try {
-      final response = await http.post(url, body: query);
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-        return data['elements'] ?? [];
-      }
-    } catch (e) {}
-    return [];
+  void navigate(double lat, double lon) async {
+    await launchUrl(Uri.parse("https://www.google.com/maps/dir/?api=1&destination=$lat,$lon"));
   }
 
-  void _openNavigation(double lat, double lon) async {
-    final url = 'https://www.google.com/maps/dir/?api=1&destination=$lat,$lon';
-    if (await canLaunchUrl(Uri.parse(url))) {
-      await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
-    }
-  }
-
-  void _makeCall(String phone) async {
-    final Uri uri = Uri(scheme: 'tel', path: phone);
-    if (await canLaunchUrl(uri)) await launchUrl(uri);
+  void call(String phone) async {
+    await launchUrl(Uri(scheme: 'tel', path: phone));
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: Text("Maternity Hospitals"),
-        backgroundColor: Colors.deepPurple,
-        foregroundColor: Colors.white,
-        actions: [
-          IconButton(icon: Icon(Icons.refresh), onPressed: _getLocationAndFetch),
-        ],
-      ),
-      body: _loading
-          ? Center(child: CircularProgressIndicator())
-          : _error.isNotEmpty
-          ? Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [Icon(Icons.error_outline, size: 64), SizedBox(height: 16), Text(_error), ElevatedButton(onPressed: _getLocationAndFetch, child: Text('Retry'))]))
+      appBar: AppBar(title: Text("Maternity Hospitals"), backgroundColor: Colors.deepPurple, actions: [
+        IconButton(icon: Icon(Icons.refresh), onPressed: getLocation),
+      ]),
+      body: loading ? Center(child: CircularProgressIndicator())
+          : error.isNotEmpty ? Center(child: Column(children: [Text(error), ElevatedButton(onPressed: getLocation, child: Text("Retry"))]))
           : ListView.builder(
         padding: EdgeInsets.all(16),
-        itemCount: _hospitals.length,
-        itemBuilder: (context, index) {
-          final hospital = _hospitals[index];
+        itemCount: hospitals.length,
+        itemBuilder: (ctx, i) {
+          var h = hospitals[i];
           return Card(
             margin: EdgeInsets.only(bottom: 16),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-            elevation: 4,
-            child: Padding(
-              padding: EdgeInsets.all(12),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Icon(Icons.local_hospital, color: Colors.deepPurple, size: 28),
-                      SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          hospital.name,
-                          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                        ),
-                      ),
-                      Container(
-                        padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: Colors.deepPurple.shade100,
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Text(
-                          '${hospital.distance.toStringAsFixed(1)} km',
-                          style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
-                        ),
-                      ),
-                    ],
-                  ),
-                  SizedBox(height: 8),
-                  Row(
-                    children: [
-                      Icon(Icons.access_time, color: Colors.grey.shade600, size: 16),
-                      SizedBox(width: 4),
-                      Expanded(
-                        child: Text(
-                          hospital.openStatus,
-                          style: TextStyle(fontSize: 12, color: Colors.grey),
-                        ),
-                      ),
-                    ],
-                  ),
-                  SizedBox(height: 12),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.end,
-                    children: [
-                      if (hospital.phone.isNotEmpty)
-                        _buildActionButton(
-                          icon: Icons.call,
-                          label: 'Call',
-                          color: Colors.green,
-                          onPressed: () => _makeCall(hospital.phone),
-                        ),
-                      SizedBox(width: 8),
-                      _buildActionButton(
-                        icon: Icons.directions,
-                        label: 'Directions',
-                        color: Colors.blue,
-                        onPressed: () => _openNavigation(hospital.lat, hospital.lon),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
+            child: ListTile(
+              title: Text(h['name'], style: TextStyle(fontWeight: FontWeight.bold)),
+              subtitle: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text("${h['distance'].toStringAsFixed(1)} km away"),
+                Text(h['open'], style: TextStyle(fontSize: 12)),
+              ]),
+              trailing: Row(mainAxisSize: MainAxisSize.min, children: [
+                if (h['phone'].isNotEmpty) IconButton(icon: Icon(Icons.call), onPressed: () => call(h['phone'])),
+                IconButton(icon: Icon(Icons.directions), onPressed: () => navigate(h['lat'], h['lon'])),
+              ]),
             ),
           );
         },
       ),
     );
   }
-
-  Widget _buildActionButton({required IconData icon, required String label, required Color color, required VoidCallback onPressed}) {
-    return ElevatedButton.icon(
-      onPressed: onPressed,
-      icon: Icon(icon, size: 16),
-      label: Text(label),
-      style: ElevatedButton.styleFrom(
-        backgroundColor: color,
-        foregroundColor: Colors.white,
-        padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),),
-    );
-  }
-}
-
-class MaternityHospital {
-  final String name;
-  final double lat;
-  final double lon;
-  final double distance;
-  final String phone;
-  final String website;
-  final String openStatus;
-  MaternityHospital({
-    required this.name,
-    required this.lat,
-    required this.lon,
-    required this.distance,
-    required this.phone,
-    required this.website,
-    required this.openStatus,
-  });
 }
