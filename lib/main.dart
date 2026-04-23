@@ -259,7 +259,7 @@ class HealthPage extends StatefulWidget {
 }
 
 class _HealthPageState extends State<HealthPage> {
-  DatabaseReference dbRef = FirebaseDatabase.instance.ref("sensor_data");
+  DatabaseReference dbRef = FirebaseDatabase.instance.ref("sensors");
   int heartRate = 0;
   int spo2 = 0;
 
@@ -277,7 +277,7 @@ class _HealthPageState extends State<HealthPage> {
       var raw = event.snapshot.value;
       if (raw != null && raw is Map) {
         setState(() {
-          heartRate = (raw["heart_rate"] ?? 0).toInt();
+          heartRate = (raw["hr"] ?? 0).toInt();
           spo2 = (raw["spo2"] ?? 0).toInt();
         });
 
@@ -555,12 +555,12 @@ class _SOSPageState extends State<SOSPage> {
     loadContacts();
     
     // Listen to vitals for inclusion in manual SOS
-    FirebaseDatabase.instance.ref("sensor_data").onValue.listen((event) {
+    FirebaseDatabase.instance.ref("sensors").onValue.listen((event) {
       var raw = event.snapshot.value;
       if (raw != null && raw is Map) {
         if (mounted) {
           setState(() {
-            heartRate = (raw["heart_rate"] ?? 0).toInt();
+            heartRate = (raw["hr"] ?? 0).toInt();
             spo2 = (raw["spo2"] ?? 0).toInt();
           });
         }
@@ -843,7 +843,7 @@ class _BabyProductsPageState extends State<BabyProductsPage> {
             ),
           ),
           ElevatedButton(
-            onPressed: () => showDialog(context: context, builder: (_) => AlertDialog(
+             onPressed: () => showDialog(context: context, builder: (_) => AlertDialog(
               title: Text("My Registry"), content: Text(selected.isEmpty ? "None" : selected.join("\n")),
             )),
             child: Text("View Registry (${selected.length})"),
