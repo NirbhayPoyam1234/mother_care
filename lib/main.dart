@@ -160,7 +160,6 @@ class Dashboard extends StatelessWidget {
                 children: [
                   _menuCard(context, "Health Vitals", Icons.favorite, Colors.pink, HealthPage()),
                   _menuCard(context, "SOS Emergency", Icons.emergency, Colors.red, SOSPage()),
-                  _menuCard(context, "Getting Pregnant", Icons.calendar_today, Colors.purple, GettingPregnantPage()),
                   _menuCard(context, "Baby Care", Icons.child_care, Colors.teal, BabyCarePage()),
                   _menuCard(context, "Baby Health", Icons.health_and_safety, Colors.orange, BabyHealthPage()),
                   _menuCard(context, "Baby Products", Icons.shopping_bag, Colors.blue, BabyProductsPage()),
@@ -666,42 +665,6 @@ class _SOSPageState extends State<SOSPage> {
   }
 }
 
-// -------------------- GETTING PREGNANT PAGE (unchanged) --------------------
-class GettingPregnantPage extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: Text("Getting Pregnant"), backgroundColor: Colors.purple),
-      body: ListView(
-        padding: EdgeInsets.all(16),
-        children: [
-          _tip(Icons.calendar_month, "Track your cycle", "Use ovulation strips or apps."),
-          _tip(Icons.monitor_weight, "Healthy weight", "Being overweight affects ovulation."),
-          _tip(Icons.medication, "Prenatal vitamins", "Take folic acid daily."),
-          _tip(Icons.self_improvement, "Manage stress", "Try yoga or meditation."),
-          _tip(Icons.water_drop, "Stay hydrated", "Drink plenty of water."),
-          _tip(Icons.no_drinks, "Avoid smoking & alcohol", "They lower fertility."),
-          _tip(Icons.restaurant, "Eat well", "Antioxidants and healthy fats help."),
-          _tip(Icons.bedtime, "Good sleep", "7-8 hours per night."),
-        ],
-      ),
-    );
-  }
-
-  Widget _tip(IconData icon, String title, String desc) {
-    return Padding(
-      padding: EdgeInsets.only(bottom: 16),
-      child: Row(children: [
-        Icon(icon, size: 28, color: Colors.purple),
-        SizedBox(width: 12),
-        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text(title, style: TextStyle(fontWeight: FontWeight.bold)),
-          Text(desc),
-        ])),
-      ]),
-    );
-  }
-}
 
 // -------------------- BABY CARE --------------------
 class BabyCarePage extends StatelessWidget {
